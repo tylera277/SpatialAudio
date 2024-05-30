@@ -7,7 +7,7 @@ import time
 import numpy as np
 
 from SoundSource import SoundSource
-
+from Math import Math
 
 class Sound:
     """ 
@@ -26,20 +26,37 @@ class Sound:
         self.buffer_size = buffer_size
         self.outputDevice = outputDevice
 
-        sound_source_1 = None
-        sound_source_2 = None
-        sound_source_3 = None
+        self.sound_source_1 = None
+        self.sound_source_2 = None
+        self.sound_source_3 = None
 
         self.SPEED_OF_SOUND = 343
         self.mix = np.zeros(2*self.buffer_size, dtype=np.int16)
         self.data_out = np.zeros(2*self.buffer_size, dtype=np.int16)
         self.left_channel_current_place = 0
         self.right_channel_current_place = 0
+
+        # Will change amplitude of sound based on distance soon
         self.amp_left = 1
         self.amp_right = 1
+
         self.angle = 0
+        self.total_delay_left = 0
+        self.total_delay_right = 0
+        self.frame_delay = 0
         
-        self.wf = wave.open("Sound_Sources/flowing_stream.wav", "rb")
+        self.wf = None
+        self.stream_out = None
+        
+        self.whole_audio_data_left = None
+        self.whole_audio_data_right = None
+        
+
+    def open_wave(self, soundSourceNumber):
+        if soundSourceNumber == 1:
+            self.wf = wave.open("{}".format(self.sound_source_1.get_fileName()), "rb")
+
+    def open_stream(self):
         self.pa = pyaudio.PyAudio()
         
         self.stream_out = self.pa.open(
@@ -50,8 +67,8 @@ class Sound:
             output_device_index=3,
             frames_per_buffer=self.buffer_size
         )
-        
 
+    def preload_waveforms(self):
         # Read the entire .wav file into memory once before the stream
         whole_audio_data_source1 = self.wf.readframes(self.wf.getnframes())
         print("Length: ", len(whole_audio_data_source1))
@@ -64,42 +81,66 @@ class Sound:
         self.whole_audio_data_left = whole_audio_data[0::2]
         self.whole_audio_data_right = whole_audio_data[1::2]
 
+    def preliminary_computes(self):
+        self.open_wave(1)
+        self.open_stream()
+        self.preload_waveforms()
+
     def create_sound_source(self, sound_source_number, file_path, source_position_vector):
 
         # Only doing one sound at the moment
         if(sound_source_number == 1):
-            sound_source_1 = SoundSource(file_path, source_position_vector)
+            self.sound_source_1 = SoundSource(file_path, source_position_vector)
+        
+
+   
     
-
-    def ITD(self, distance_from_listener, angle_in_rad):
-        time = abs(distance_from_listener/self.SPEED_OF_SOUND * (angle_in_rad + math.sin(angle_in_rad)))
-
-        return time
-
-    def ILD(self, angle_in_rad):
-        return math.cos(angle_in_rad)
-
-
     def compute(self, users_orientation_vector):
-        start_time = time.time()
-        first_time = True
-        print("Meow:", users_orientation_vector[0])
+        
+        position_of_sound_angle = Math().angle_compute(self.sound_source_1.get_vector_position_of_sound(), users_orientation_vector)#np.radians(float(users_orientation_vector[0]))
 
-        position_of_sound_angle = float(users_orientation_vector[0])
+        time_delay = Math().ITD(1, self.SPEED_OF_SOUND,  position_of_sound_angle)
+        #print("Time_delay:", time_delay)
+        frame_delay = int(time_delay * self.wf.getframerate())
 
-        frame_delay = int(self.ITD(1, position_of_sound_angle))
-        amp_diff = self.ILD(position_of_sound_angle)
+        amp_diff = Math().ILD(position_of_sound_angle)
+        #print("FRAME Delay: ", frame_delay)
 
-        if(first_time):
-            delay = np.zeros((frame_delay))
+        
+        if self.frame_delay != frame_delay:
+            diff = frame_delay - self.frame_delay
+            print("Diff:", diff)
+            print("Delays: ", self.total_delay_left/1E3, ", ", self.total_delay_right/1E3)
+            print("Deg: ", np.degrees(position_of_sound_angle))
+            print("-------------")
+            delay = np.zeros((abs(diff)))
+
             if (position_of_sound_angle >= 0) and (position_of_sound_angle < np.pi):
-                self.whole_audio_data_left = np.insert(self.whole_audio_data_left, 0, delay, axis=0)
-                self.amp_left = (amp_diff * self.amp_right) + 0.1
+                if diff > 0:
+                    self.total_delay_left += frame_delay
+                    self.whole_audio_data_left = np.insert(self.whole_audio_data_left, 0, delay, axis=0)
+                    self.amp_left = (amp_diff * self.amp_right) + 0.1
+                elif diff < 0:
+                    self.total_delay_right += frame_delay
+                    self.whole_audio_data_right = np.insert(self.whole_audio_data_right, 0, delay, axis=0)
+                    self.amp_right = (amp_diff * self.amp_left) + 0.1
+            elif (position_of_sound_angle < 2*np.pi) and (position_of_sound_angle >= np.pi):
+                if diff > 0:
+                    self.total_delay_right += frame_delay
+                    self.whole_audio_data_right = np.insert(self.whole_audio_data_right, 0, delay, axis=0)
+                    self.amp_right = (amp_diff * self.amp_left) + 0.1
+                elif diff < 0:
+                    self.total_delay_left += frame_delay
+                    self.whole_audio_data_left = np.insert(self.whole_audio_data_left, 0, delay, axis=0)
+                    self.amp_left = (amp_diff * self.amp_right) + 0.1
             else:
-                self.whole_audio_data_right = np.insert(self.whole_audio_data_right, 0, delay, axis=0)
-                self.amp_right = (amp_diff * self.amp_left) + 0.1
+                print("PANIC!")
+
+        #print("Delays: ", self.total_delay_left/1E3, ", ", self.total_delay_right/1E3)
+        self.frame_delay = frame_delay
 
 
+    def output_formatting(self):
         # This needs to be at the end of the execution so it sends the right 
         # format to be played out on the speakers
         self.mix[0::2] = self.amp_left * self.whole_audio_data_left[self.left_channel_current_place:self.left_channel_current_place + self.buffer_size]
@@ -111,7 +152,7 @@ class Sound:
         self.left_channel_current_place += self.buffer_size
         self.right_channel_current_place += self.buffer_size
 
-
-
+    
     def output_sound_to_user(self, orientationVector):
         self.compute(orientationVector)        
+        self.output_formatting()

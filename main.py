@@ -9,11 +9,14 @@ from Sound import Sound
 import numpy as np
 
 
-
 pico_port = "/dev/cu.usbmodem14101"
 desiredOutputDevice = 3
+
+
 outputSound1 = "Sound_Sources/flowing_stream.wav"
-positionOfSound1 = [1,0,0]
+#outputSound1 = "Sound_Sources/chirping_birds.wav"
+positionOfSound1 = np.zeros((1,3))
+positionOfSound1[0,0] = 1
 
 # Instantiate each classes object
 o = Orientation(pico_port)
@@ -39,12 +42,13 @@ Sound.create_sound_source(filename, positionVectorOfItsLocation)
 .
 """
 
+s.preliminary_computes()
+
 # Start the programs tracking and adjusting audio levels based on it
 while True:
-    #user_Position = Position.getUserPosition()
     user_Orientation = np.array(o.read())
-    print(user_Orientation)
+    print("USER:", user_Orientation)
     s.output_sound_to_user(user_Orientation) 
-
+    #print("---------------")
 
 
