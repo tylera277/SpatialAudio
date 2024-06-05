@@ -10,7 +10,7 @@ class Math:
         pass
 
 
-    def ITD(self, speed_of_sound, distance_from_listener, angle_in_rad):
+    def ITD(self, distance_from_listener, speed_of_sound, angle_in_rad):
 
         time = abs(distance_from_listener/speed_of_sound * (angle_in_rad + math.sin(angle_in_rad)))
 
@@ -41,18 +41,17 @@ class Math:
         return rotation_matrix    
 
     def angle_compute(self, sound_position_vector, orientationVector, soundSourceNumber=1):
-        position_wrt_fixed_ref_frame = sound_position_vector
 
+        #print("Beep: ", sound_position_vector, ": ", orientationVector)
+        
+        heading_orientation_vector_raw = np.array((0,1,0))
+
+        
         yaw_angle = np.radians(float(orientationVector[0]))
-        #print("eep:", position_wrt_fixed_ref_frame)
-        #print("HMM1:", position_wrt_fixed_ref_frame)
+        heading_orientation_vector_rotated = np.matmul(heading_orientation_vector_raw, self.yaw_rotation(yaw_angle))
+        
+        heading_angle = np.arctan2(heading_orientation_vector_rotated[0], heading_orientation_vector_rotated[1])
+        sound_angle = np.arctan2(sound_position_vector[0,0], sound_position_vector[0,1])
 
-        position_wrt_moving_ref_frame = np.matmul(position_wrt_fixed_ref_frame, self.yaw_rotation(yaw_angle))
-
-        #print("HMM: ", position_wrt_moving_ref_frame)
-
-        angle_top = np.dot(position_wrt_fixed_ref_frame[0], position_wrt_moving_ref_frame[0])
-        angle_bot = (np.linalg.norm(position_wrt_fixed_ref_frame) * np.linalg.norm(position_wrt_moving_ref_frame)) + 0.001
-        #print("top: ", angle_top)
-        #print("bottom: ", angle_bot)
-        return np.arccos(angle_top/angle_bot)
+        
+        return (sound_angle-heading_angle)

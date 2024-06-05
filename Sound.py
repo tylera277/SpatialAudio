@@ -6,8 +6,8 @@ import time
 
 import numpy as np
 
-from SoundSource import SoundSource
-from Math import Math
+from MainCode.SoundSource import SoundSource
+from MainCode.Math import Math
 
 class Sound:
     """ 
@@ -97,34 +97,40 @@ class Sound:
     
     def compute(self, users_orientation_vector):
         
-        position_of_sound_angle = Math().angle_compute(self.sound_source_1.get_vector_position_of_sound(), users_orientation_vector)#np.radians(float(users_orientation_vector[0]))
+        angle = Math().angle_compute(self.sound_source_1.get_vector_position_of_sound(), users_orientation_vector)
 
-        time_delay = Math().ITD(1, self.SPEED_OF_SOUND,  position_of_sound_angle)
-        #print("Time_delay:", time_delay)
+        time_delay = Math().ITD(1, self.SPEED_OF_SOUND,  angle)
+
         frame_delay = int(time_delay * self.wf.getframerate())
+        distance = np.linalg.norm(self.sound_source_1.get_vector_position_of_sound())
+        amp_falloff_distance = 1/np.power(distance, 2)
 
-        amp_diff = Math().ILD(position_of_sound_angle)
-        #print("FRAME Delay: ", frame_delay)
+        self.amp_left = amp_falloff_distance
+        self.amp_right = amp_falloff_distance
 
-        
+        amp_diff = Math().ILD(angle)
+
+        direction_of_sound = angle
         if self.frame_delay != frame_delay:
             diff = frame_delay - self.frame_delay
-            print("Diff:", diff)
-            print("Delays: ", self.total_delay_left/1E3, ", ", self.total_delay_right/1E3)
-            print("Deg: ", np.degrees(position_of_sound_angle))
-            print("-------------")
+            #print("Diff:", diff)
+            #print("Delays: ", self.total_delay_left, ", ", self.total_delay_right)
+            #print("Deg: ", np.degrees(angle))
+            #print("-------------")
             delay = np.zeros((abs(diff)))
 
-            if (position_of_sound_angle >= 0) and (position_of_sound_angle < np.pi):
+            if (direction_of_sound >= 0) and (direction_of_sound < np.pi):
                 if diff > 0:
-                    self.total_delay_left += frame_delay
+                    self.total_delay_left += time_delay
                     self.whole_audio_data_left = np.insert(self.whole_audio_data_left, 0, delay, axis=0)
                     self.amp_left = (amp_diff * self.amp_right) + 0.1
                 elif diff < 0:
-                    self.total_delay_right += frame_delay
+                    self.total_delay_right += time_delay
                     self.whole_audio_data_right = np.insert(self.whole_audio_data_right, 0, delay, axis=0)
-                    self.amp_right = (amp_diff * self.amp_left) + 0.1
-            elif (position_of_sound_angle < 2*np.pi) and (position_of_sound_angle >= np.pi):
+                    self.amp_right = (amp_diff * self.amp_left)
+
+
+            elif (direction_of_sound < 0) and (direction_of_sound >= -np.pi):
                 if diff > 0:
                     self.total_delay_right += frame_delay
                     self.whole_audio_data_right = np.insert(self.whole_audio_data_right, 0, delay, axis=0)
